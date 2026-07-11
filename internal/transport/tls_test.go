@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -51,6 +52,38 @@ func TestBuildTLSConfigVerifyCABundle(t *testing.T) {
 func TestBuildTLSConfigVerifyBadPathErrors(t *testing.T) {
 	if _, err := BuildTLSConfig(TLSOptions{Verify: "/no/such/file.pem"}); err == nil {
 		t.Fatal("expected error for unreadable --verify path")
+	}
+}
+
+func TestBuildTLSConfigSSLVersionPinsRange(t *testing.T) {
+	cfg, err := BuildTLSConfig(TLSOptions{SSLVersion: "tls1.2"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.MinVersion != tls.VersionTLS12 || cfg.MaxVersion != tls.VersionTLS12 {
+		t.Fatalf("MinVersion=%x MaxVersion=%x, want both %x", cfg.MinVersion, cfg.MaxVersion, tls.VersionTLS12)
+	}
+}
+
+func TestBuildTLSConfigSSL23LeavesRangeUnset(t *testing.T) {
+	cfg, err := BuildTLSConfig(TLSOptions{SSLVersion: "ssl2.3"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.MinVersion != 0 || cfg.MaxVersion != 0 {
+		t.Fatalf("MinVersion=%x MaxVersion=%x, want both unset (0)", cfg.MinVersion, cfg.MaxVersion)
+	}
+}
+
+func TestBuildTLSConfigSSL3Errors(t *testing.T) {
+	if _, err := BuildTLSConfig(TLSOptions{SSLVersion: "ssl3"}); err == nil {
+		t.Fatal("expected error: SSLv3 is not supported by Go's crypto/tls")
+	}
+}
+
+func TestBuildTLSConfigUnknownSSLVersionErrors(t *testing.T) {
+	if _, err := BuildTLSConfig(TLSOptions{SSLVersion: "tls9"}); err == nil {
+		t.Fatal("expected error for unknown --ssl value")
 	}
 }
 
