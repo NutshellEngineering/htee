@@ -120,3 +120,96 @@ func TestNextRequestMissingLocationErrors(t *testing.T) {
 		t.Fatal("expected error for missing Location header")
 	}
 }
+
+func TestSendFollowingSingleHopWhenFollowDisabled(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "/b")
+		w.WriteHeader(302)
+	}))
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/a", nil)
+	c := New()
+	chain, err := c.SendFollowing(req, nil, nil, FollowOptions{Follow: false, MaxRedirects: 30})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(chain.Hops) != 1 {
+		t.Fatalf("hops = %d, want 1 (redirect not followed)", len(chain.Hops))
+	}
+	if chain.Hops[0].Result.Response.StatusCode != 302 {
+		t.Fatalf("status = %d, want 302", chain.Hops[0].Result.Response.StatusCode)
+	}
+}
+
+func TestSendFollowingChasesRedirectChain(t *testing.T) {
+	var hits []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits = append(hits, r.URL.Path)
+		switch r.URL.Path {
+		case "/a":
+			w.Header().Set("Location", "/b")
+			w.WriteHeader(302)
+		case "/b":
+			w.Write([]byte("final"))
+		}
+	}))
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/a", nil)
+	c := New()
+	chain, err := c.SendFollowing(req, nil, nil, FollowOptions{Follow: true, MaxRedirects: 30})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(chain.Hops) != 2 {
+		t.Fatalf("hops = %d, want 2", len(chain.Hops))
+	}
+	final := chain.Final()
+	if string(final.Result.Body) != "final" {
+		t.Fatalf("final body = %q, want %q", final.Result.Body, "final")
+	}
+	if hits[0] != "/a" || hits[1] != "/b" {
+		t.Fatalf("hit order = %v", hits)
+	}
+}
+
+func TestSendFollowingExceedsMaxRedirects(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "/loop")
+		w.WriteHeader(302)
+	}))
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/loop", nil)
+	c := New()
+	_, err := c.SendFollowing(req, nil, nil, FollowOptions{Follow: true, MaxRedirects: 3})
+	if err == nil {
+		t.Fatal("expected error for exceeding --max-redirects")
+	}
+}
+
+func TestSendFollowingZeroMaxRedirectsIsUnlimited(t *testing.T) {
+	count := 0
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		count++
+		if count >= 5 {
+			w.Write([]byte("done"))
+			return
+		}
+		w.Header().Set("Location", srv.URL+"/next")
+		w.WriteHeader(302)
+	}))
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/start", nil)
+	c := New()
+	chain, err := c.SendFollowing(req, nil, nil, FollowOptions{Follow: true, MaxRedirects: 0})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(chain.Hops) != 5 {
+		t.Fatalf("hops = %d, want 5", len(chain.Hops))
+	}
+}

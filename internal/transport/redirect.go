@@ -88,3 +88,65 @@ func removeHeaderNames(order []string, names ...string) []string {
 	}
 	return out
 }
+
+// FollowOptions configures whether and how far Client.SendFollowing chases
+// 3xx redirects, mirroring httpie's --follow/-F and --max-redirects.
+type FollowOptions struct {
+	Follow       bool
+	MaxRedirects int // 0 means unlimited, matching httpie's own --max-redirects=0 semantics
+}
+
+// Hop is one request/response pair sent while following redirects.
+type Hop struct {
+	Request     *http.Request
+	Body        []byte
+	HeaderOrder []string
+	Result      *Result
+}
+
+// Chain is every hop sent for one logical request: Hops[len(Hops)-1] is the
+// final, non-redirected hop (or the only hop, when following is disabled
+// or the first response wasn't a redirect).
+type Chain struct {
+	Hops []Hop
+}
+
+// Final returns the chain's last hop.
+func (c *Chain) Final() Hop {
+	return c.Hops[len(c.Hops)-1]
+}
+
+// SendFollowing sends req and, per opts, follows any 3xx redirect chain
+// that results, returning every hop sent. body/headerOrder are req's
+// already-built body bytes and display header order (from request.Build) -
+// http.Request doesn't retain a re-readable copy of its body, so callers
+// must pass it alongside the request.
+func (c *Client) SendFollowing(req *http.Request, body []byte, headerOrder []string, opts FollowOptions) (*Chain, error) {
+	chain := &Chain{}
+	current, currentBody, currentOrder := req, body, headerOrder
+
+	for {
+		result, err := c.Send(current)
+		if err != nil {
+			return nil, err
+		}
+		chain.Hops = append(chain.Hops, Hop{
+			Request:     current,
+			Body:        currentBody,
+			HeaderOrder: currentOrder,
+			Result:      result,
+		})
+
+		if !opts.Follow || !isRedirectStatus(result.Response.StatusCode) {
+			return chain, nil
+		}
+		if opts.MaxRedirects != 0 && len(chain.Hops) >= opts.MaxRedirects {
+			return nil, fmt.Errorf("exceeded --max-redirects=%d", opts.MaxRedirects)
+		}
+
+		current, currentBody, currentOrder, err = nextRequest(current, currentBody, currentOrder, result.Response)
+		if err != nil {
+			return nil, err
+		}
+	}
+}
