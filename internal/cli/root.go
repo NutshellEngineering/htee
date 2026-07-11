@@ -243,6 +243,15 @@ func resolveHTTPTransport(flags *sharedFlags) (*http.Transport, error) {
 
 	t := http.DefaultTransport.(*http.Transport).Clone()
 	t.TLSClientConfig = tlsCfg
+
+	proxyFn, err := transport.ProxyFunc(flags.Proxy)
+	if err != nil {
+		return nil, err
+	}
+	if proxyFn != nil {
+		t.Proxy = proxyFn
+	}
+
 	return t, nil
 }
 

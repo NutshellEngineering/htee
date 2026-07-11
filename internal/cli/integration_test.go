@@ -430,3 +430,17 @@ func TestZeroTimeoutMeansNoLimit(t *testing.T) {
 		t.Fatalf("expected response body: %s", out)
 	}
 }
+
+func TestProxyRoutesThroughConfiguredProxy(t *testing.T) {
+	var proxyHit bool
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		proxyHit = true
+		w.WriteHeader(502) // don't actually forward; just prove the proxy was contacted
+	}))
+	defer proxy.Close()
+
+	_, _ = runCLI(t, "GET", "--proxy", "http:"+proxy.URL, "http://example.invalid/")
+	if !proxyHit {
+		t.Fatal("expected request to be routed through the configured --proxy")
+	}
+}
