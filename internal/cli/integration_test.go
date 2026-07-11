@@ -373,3 +373,30 @@ func TestWithoutAllOnlyShowsFinalResponse(t *testing.T) {
 		t.Fatalf("expected both hop requests even without --all: %s", out)
 	}
 }
+
+func TestVerifyNoAllowsSelfSignedCert(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("secure"))
+	}))
+	defer srv.Close()
+
+	out, err := runCLI(t, "GET", "--verify", "no", srv.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v; out=%s", err, out)
+	}
+	if !strings.Contains(out, "secure") {
+		t.Fatalf("expected response body in output: %s", out)
+	}
+}
+
+func TestVerifyDefaultRejectsSelfSignedCert(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("secure"))
+	}))
+	defer srv.Close()
+
+	_, err := runCLI(t, "GET", srv.URL)
+	if err == nil {
+		t.Fatal("expected TLS verification error against an unrecognized self-signed cert")
+	}
+}

@@ -26,6 +26,13 @@ type sharedFlags struct {
 	Follow       bool
 	MaxRedirects int
 
+	Verify      string
+	SSLVersion  string
+	Ciphers     string
+	Cert        string
+	CertKey     string
+	CertKeyPass string
+
 	DefaultScheme string
 
 	Auth        string
@@ -65,6 +72,13 @@ func registerSharedFlags(cmd *cobra.Command, f *sharedFlags) {
 
 	fl.BoolVarP(&f.Follow, "follow", "F", false, "Follow 30x Location redirects")
 	fl.IntVar(&f.MaxRedirects, "max-redirects", 30, "Maximum number of redirects to follow (with --follow); 0 means unlimited")
+
+	fl.StringVar(&f.Verify, "verify", "yes", `If "no", skip SSL certificate verification; if a file path, use it as a CA bundle`)
+	fl.StringVar(&f.SSLVersion, "ssl", "", "TLS protocol version to use: ssl2.3 (negotiate highest, default), tls1, tls1.1, tls1.2, or tls1.3")
+	fl.StringVar(&f.Ciphers, "ciphers", "", "Colon- or comma-separated list of Go crypto/tls cipher suite names")
+	fl.StringVar(&f.Cert, "cert", "", "Client-side SSL certificate file (PEM); may also contain the private key")
+	fl.StringVar(&f.CertKey, "cert-key", "", "Private key for --cert, if not included in the cert file")
+	fl.StringVar(&f.CertKeyPass, "cert-key-pass", "", "Passphrase for --cert-key, if it's encrypted (prompted for on a TTY if omitted)")
 
 	fl.StringVar(&f.DefaultScheme, "default-scheme", "http", "Default URL scheme when none is given")
 

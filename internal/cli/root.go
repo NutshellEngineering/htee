@@ -6,6 +6,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 
@@ -182,7 +183,11 @@ func run(cmd *cobra.Command, cfg Config, flags *sharedFlags, args []string) erro
 		return nil
 	}
 
-	transportRT := auth.TransportFor(nil, authDecision)
+	baseTransport, err := resolveHTTPTransport(flags)
+	if err != nil {
+		return err
+	}
+	transportRT := auth.TransportFor(baseTransport, authDecision)
 	client := transport.New()
 	client.HTTP.Transport = transportRT
 
@@ -215,6 +220,28 @@ func run(cmd *cobra.Command, cfg Config, flags *sharedFlags, args []string) erro
 	}
 
 	return nil
+}
+
+// resolveHTTPTransport builds the *http.Transport carrying flags.Verify/
+// SSLVersion/Ciphers/Cert/CertKey/CertKeyPass's TLS configuration. It's the
+// `base` handed to auth.TransportFor, so auth (e.g. digest) wraps on top of
+// TLS/proxy settings rather than replacing them.
+func resolveHTTPTransport(flags *sharedFlags) (*http.Transport, error) {
+	tlsCfg, err := transport.BuildTLSConfig(transport.TLSOptions{
+		Verify:      flags.Verify,
+		SSLVersion:  flags.SSLVersion,
+		Ciphers:     flags.Ciphers,
+		CertFile:    flags.Cert,
+		CertKeyFile: flags.CertKey,
+		CertKeyPass: flags.CertKeyPass,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.TLSClientConfig = tlsCfg
+	return t, nil
 }
 
 // resolveOutputOptions builds the output.Options controlling
