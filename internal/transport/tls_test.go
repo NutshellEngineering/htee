@@ -87,6 +87,42 @@ func TestBuildTLSConfigUnknownSSLVersionErrors(t *testing.T) {
 	}
 }
 
+func TestBuildTLSConfigCiphersResolvesKnownName(t *testing.T) {
+	cfg, err := BuildTLSConfig(TLSOptions{Ciphers: "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.CipherSuites) != 1 || cfg.CipherSuites[0] != tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 {
+		t.Fatalf("CipherSuites = %v, want [TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256]", cfg.CipherSuites)
+	}
+}
+
+func TestBuildTLSConfigCiphersAcceptsColonSeparatedList(t *testing.T) {
+	cfg, err := BuildTLSConfig(TLSOptions{Ciphers: "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256:TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.CipherSuites) != 2 {
+		t.Fatalf("CipherSuites = %v, want 2 entries", cfg.CipherSuites)
+	}
+}
+
+func TestBuildTLSConfigUnknownCipherErrors(t *testing.T) {
+	if _, err := BuildTLSConfig(TLSOptions{Ciphers: "NOT_A_REAL_CIPHER"}); err == nil {
+		t.Fatal("expected error for unknown cipher name")
+	}
+}
+
+func TestBuildTLSConfigEmptyCiphersLeavesDefault(t *testing.T) {
+	cfg, err := BuildTLSConfig(TLSOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.CipherSuites != nil {
+		t.Fatalf("CipherSuites = %v, want nil (Go picks its own defaults)", cfg.CipherSuites)
+	}
+}
+
 func writeTempFile(t *testing.T, name string, content []byte) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), name)

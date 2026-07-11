@@ -39,6 +39,12 @@ func BuildTLSConfig(opts TLSOptions) (*tls.Config, error) {
 	}
 	cfg.MinVersion, cfg.MaxVersion = minV, maxV
 
+	cipherIDs, err := resolveCiphers(opts.Ciphers)
+	if err != nil {
+		return nil, err
+	}
+	cfg.CipherSuites = cipherIDs
+
 	return cfg, nil
 }
 
@@ -87,4 +93,33 @@ func resolveSSLVersion(raw string) (min, max uint16, err error) {
 		return 0, 0, fmt.Errorf("invalid --ssl version %q (expected one of: ssl2.3, tls1, tls1.1, tls1.2, tls1.3)", raw)
 	}
 	return v, v, nil
+}
+
+// resolveCiphers implements --ciphers: a colon- or comma-separated list of
+// Go crypto/tls cipher suite names (e.g. TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256).
+// Unlike httpie (which accepts OpenSSL cipher-list syntax via urllib3),
+// there's no OpenSSL-name-to-Go-suite mapping in the stdlib, so names must
+// match tls.CipherSuiteName exactly - see tls.CipherSuites()/
+// tls.InsecureCipherSuites() for the full list.
+func resolveCiphers(raw string) ([]uint16, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	names := strings.FieldsFunc(raw, func(r rune) bool { return r == ':' || r == ',' })
+	lookup := make(map[string]uint16)
+	for _, cs := range tls.CipherSuites() {
+		lookup[cs.Name] = cs.ID
+	}
+	for _, cs := range tls.InsecureCipherSuites() {
+		lookup[cs.Name] = cs.ID
+	}
+	ids := make([]uint16, 0, len(names))
+	for _, name := range names {
+		id, ok := lookup[name]
+		if !ok {
+			return nil, fmt.Errorf("--ciphers: unknown cipher suite %q (expected a Go crypto/tls suite name, e.g. TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256)", name)
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
 }
