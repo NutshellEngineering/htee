@@ -123,6 +123,41 @@ func TestBuildTLSConfigEmptyCiphersLeavesDefault(t *testing.T) {
 	}
 }
 
+func TestBuildTLSConfigLoadsClientCert(t *testing.T) {
+	_, _, _, clientCertPEM, clientKeyPEM := generateTestCertChain(t)
+	certFile := writeTempFile(t, "client.pem", clientCertPEM)
+	keyFile := writeTempFile(t, "client.key", clientKeyPEM)
+
+	cfg, err := BuildTLSConfig(TLSOptions{CertFile: certFile, CertKeyFile: keyFile})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Certificates) != 1 {
+		t.Fatalf("Certificates = %d, want 1", len(cfg.Certificates))
+	}
+}
+
+func TestBuildTLSConfigNoCertLeavesCertificatesEmpty(t *testing.T) {
+	cfg, err := BuildTLSConfig(TLSOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Certificates) != 0 {
+		t.Fatalf("Certificates = %d, want 0", len(cfg.Certificates))
+	}
+}
+
+func TestBuildTLSConfigCertWithoutKeyFileErrors(t *testing.T) {
+	_, _, _, clientCertPEM, _ := generateTestCertChain(t)
+	certFile := writeTempFile(t, "client.pem", clientCertPEM)
+
+	// --cert without --cert-key: httpie allows a combined cert+key file;
+	// here the cert file has no key material, so pairing must fail.
+	if _, err := BuildTLSConfig(TLSOptions{CertFile: certFile}); err == nil {
+		t.Fatal("expected error: cert file has no private key and no --cert-key was given")
+	}
+}
+
 func writeTempFile(t *testing.T, name string, content []byte) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), name)

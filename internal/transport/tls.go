@@ -7,9 +7,12 @@ package transport
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"strings"
+
+	"app.getnutshell/htee/internal/auth"
 )
 
 // TLSOptions configures BuildTLSConfig, one field per SSL-group flag.
@@ -44,6 +47,14 @@ func BuildTLSConfig(opts TLSOptions) (*tls.Config, error) {
 		return nil, err
 	}
 	cfg.CipherSuites = cipherIDs
+
+	cert, err := resolveClientCert(opts.CertFile, opts.CertKeyFile, opts.CertKeyPass)
+	if err != nil {
+		return nil, err
+	}
+	if cert != nil {
+		cfg.Certificates = []tls.Certificate{*cert}
+	}
 
 	return cfg, nil
 }
@@ -122,4 +133,67 @@ func resolveCiphers(raw string) ([]uint16, error) {
 		ids = append(ids, id)
 	}
 	return ids, nil
+}
+
+// resolveClientCert implements --cert/--cert-key/--cert-key-pass: loads a
+// client certificate (and, if the private key is PEM-encrypted, decrypts
+// it - prompting on the terminal for a passphrase if --cert-key-pass
+// wasn't given, mirroring httpie's SSLCredentials prompt behavior).
+// certFile == "" means no client cert was requested (the common case).
+func resolveClientCert(certFile, keyFile, keyPass string) (*tls.Certificate, error) {
+	if certFile == "" {
+		return nil, nil
+	}
+	if keyFile == "" {
+		keyFile = certFile // httpie allows a combined cert+key file
+	}
+
+	certPEM, err := os.ReadFile(certFile)
+	if err != nil {
+		return nil, fmt.Errorf("--cert: %w", err)
+	}
+	keyPEM, err := os.ReadFile(keyFile)
+	if err != nil {
+		return nil, fmt.Errorf("--cert-key: %w", err)
+	}
+
+	keyPEM, err = decryptKeyIfNeeded(keyPEM, keyPass)
+	if err != nil {
+		return nil, err
+	}
+
+	cert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return nil, fmt.Errorf("--cert/--cert-key: %w", err)
+	}
+	return &cert, nil
+}
+
+// decryptKeyIfNeeded decrypts a legacy PEM-encrypted private key block
+// (RFC 1423 "Proc-Type: 4,ENCRYPTED") using pass, prompting for it if
+// empty. Returns keyPEM unchanged if it isn't encrypted.
+//
+// x509.IsEncryptedPEMBlock/DecryptPEMBlock are deprecated by the Go
+// standard library (the format is legacy and insecure by modern
+// standards), but there is no stdlib replacement for reading this format,
+// and it's exactly what httpie/OpenSSL still produce for --cert-key-pass
+// today, so it's used deliberately here.
+func decryptKeyIfNeeded(keyPEM []byte, pass string) ([]byte, error) {
+	block, rest := pem.Decode(keyPEM)
+	if block == nil || !x509.IsEncryptedPEMBlock(block) { //nolint:staticcheck
+		return keyPEM, nil
+	}
+	if pass == "" {
+		var err error
+		pass, err = auth.PromptPassword("passphrase for --cert-key: ")
+		if err != nil {
+			return nil, err
+		}
+	}
+	der, err := x509.DecryptPEMBlock(block, []byte(pass)) //nolint:staticcheck
+	if err != nil {
+		return nil, fmt.Errorf("--cert-key-pass: %w", err)
+	}
+	decrypted := pem.EncodeToMemory(&pem.Block{Type: block.Type, Bytes: der})
+	return append(decrypted, rest...), nil
 }
