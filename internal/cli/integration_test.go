@@ -444,3 +444,18 @@ func TestProxyRoutesThroughConfiguredProxy(t *testing.T) {
 		t.Fatal("expected request to be routed through the configured --proxy")
 	}
 }
+
+func TestMaxHeadersFlagParsesAndIsAccepted(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	out, err := runCLI(t, "GET", "--max-headers", "5", srv.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v; out=%s", err, out)
+	}
+	if !strings.Contains(out, "ok") {
+		t.Fatalf("expected response body: %s", out)
+	}
+}

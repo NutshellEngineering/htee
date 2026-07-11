@@ -36,6 +36,12 @@ type sharedFlags struct {
 	Timeout float64
 	Proxy   []string
 
+	// MaxHeaders is parsed for httpie CLI compatibility but not enforced:
+	// Go's net/http client has no equivalent to Python's
+	// http.client._MAXHEADERS guard. See docs/superpowers/plans/
+	// 2026-07-11-phase4-redirects-ssl.md's Global Constraints for why.
+	MaxHeaders int
+
 	DefaultScheme string
 
 	Auth        string
@@ -85,6 +91,7 @@ func registerSharedFlags(cmd *cobra.Command, f *sharedFlags) {
 
 	fl.Float64Var(&f.Timeout, "timeout", 0, "Connection timeout in seconds; 0 means no timeout. Unlike httpie's inactivity-based timeout, this caps the whole request (connect through full body read)")
 	fl.StringArrayVar(&f.Proxy, "proxy", nil, `Proxy as protocol:URL (e.g. http:http://localhost:8080); repeatable, or use protocol "all" as a catch-all`)
+	fl.IntVar(&f.MaxHeaders, "max-headers", 0, "Accepted for httpie compatibility; not enforced (Go's HTTP client has no equivalent limit)")
 
 	fl.StringVar(&f.DefaultScheme, "default-scheme", "http", "Default URL scheme when none is given")
 
