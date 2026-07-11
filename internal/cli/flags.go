@@ -33,6 +33,8 @@ type sharedFlags struct {
 	CertKey     string
 	CertKeyPass string
 
+	Timeout float64
+
 	DefaultScheme string
 
 	Auth        string
@@ -79,6 +81,8 @@ func registerSharedFlags(cmd *cobra.Command, f *sharedFlags) {
 	fl.StringVar(&f.Cert, "cert", "", "Client-side SSL certificate file (PEM); may also contain the private key")
 	fl.StringVar(&f.CertKey, "cert-key", "", "Private key for --cert, if not included in the cert file")
 	fl.StringVar(&f.CertKeyPass, "cert-key-pass", "", "Passphrase for --cert-key, if it's encrypted (prompted for on a TTY if omitted)")
+
+	fl.Float64Var(&f.Timeout, "timeout", 0, "Connection timeout in seconds; 0 means no timeout. Unlike httpie's inactivity-based timeout, this caps the whole request (connect through full body read)")
 
 	fl.StringVar(&f.DefaultScheme, "default-scheme", "http", "Default URL scheme when none is given")
 

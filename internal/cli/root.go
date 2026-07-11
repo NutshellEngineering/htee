@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -190,6 +191,7 @@ func run(cmd *cobra.Command, cfg Config, flags *sharedFlags, args []string) erro
 	transportRT := auth.TransportFor(baseTransport, authDecision)
 	client := transport.New()
 	client.HTTP.Transport = transportRT
+	client.HTTP.Timeout = time.Duration(flags.Timeout * float64(time.Second))
 
 	chain, err := client.SendFollowing(built.Request, built.Body, built.HeaderOrder, transport.FollowOptions{
 		Follow:       flags.Follow,

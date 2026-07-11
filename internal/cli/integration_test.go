@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func runCLI(t *testing.T, verbPreset string, args ...string) (stdout string, err error) {
@@ -398,5 +399,34 @@ func TestVerifyDefaultRejectsSelfSignedCert(t *testing.T) {
 	_, err := runCLI(t, "GET", srv.URL)
 	if err == nil {
 		t.Fatal("expected TLS verification error against an unrecognized self-signed cert")
+	}
+}
+
+func TestTimeoutErrorsOnSlowServer(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		w.Write([]byte("too slow"))
+	}))
+	defer srv.Close()
+
+	_, err := runCLI(t, "GET", "--timeout", "0.05", srv.URL)
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+}
+
+func TestZeroTimeoutMeansNoLimit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(50 * time.Millisecond)
+		w.Write([]byte("eventually"))
+	}))
+	defer srv.Close()
+
+	out, err := runCLI(t, "GET", srv.URL)
+	if err != nil {
+		t.Fatalf("unexpected error with default (no) timeout: %v; out=%s", err, out)
+	}
+	if !strings.Contains(out, "eventually") {
+		t.Fatalf("expected response body: %s", out)
 	}
 }
