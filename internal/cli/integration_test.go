@@ -316,3 +316,60 @@ func TestMaxRedirectsExceeded(t *testing.T) {
 		t.Fatal("expected error for exceeding --max-redirects")
 	}
 }
+
+func TestAllShowsIntermediateHop(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/start" {
+			w.Header().Set("Location", "/end")
+			w.WriteHeader(302)
+			return
+		}
+		w.Write([]byte("landed"))
+	}))
+	defer srv.Close()
+
+	// --print Hh (request+response headers, no body) isolates the request-
+	// vs-response distinction: with --all, both status lines (302 and 200)
+	// should appear alongside both request lines.
+	out, err := runCLI(t, "GET", "-F", "--all", "--print", "Hh", srv.URL+"/start")
+	if err != nil {
+		t.Fatalf("unexpected error: %v; out=%s", err, out)
+	}
+	if !strings.Contains(out, "302 Found") {
+		t.Fatalf("expected intermediate 302 response in --all output: %s", out)
+	}
+	if !strings.Contains(out, "200 OK") {
+		t.Fatalf("expected final 200 response in --all output: %s", out)
+	}
+	if strings.Count(out, "GET /") < 2 {
+		t.Fatalf("expected both hop requests (GET /start and GET /end) in --all output: %s", out)
+	}
+}
+
+func TestWithoutAllOnlyShowsFinalResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/start" {
+			w.Header().Set("Location", "/end")
+			w.WriteHeader(302)
+			return
+		}
+		w.Write([]byte("landed"))
+	}))
+	defer srv.Close()
+
+	out, err := runCLI(t, "GET", "-F", "--print", "Hh", srv.URL+"/start")
+	if err != nil {
+		t.Fatalf("unexpected error: %v; out=%s", err, out)
+	}
+	if strings.Contains(out, "302 Found") {
+		t.Fatalf("did not expect intermediate 302 response without --all: %s", out)
+	}
+	if !strings.Contains(out, "200 OK") {
+		t.Fatalf("expected final 200 response: %s", out)
+	}
+	// Both hop requests are still shown (httpie always shows every request
+	// it made), only the intermediate *response* is suppressed.
+	if strings.Count(out, "GET /") < 2 {
+		t.Fatalf("expected both hop requests even without --all: %s", out)
+	}
+}
