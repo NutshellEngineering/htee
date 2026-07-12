@@ -41,7 +41,7 @@ func TestBuildJSONDefault(t *testing.T) {
 	if acc := res.Request.Header.Get("Accept"); acc != "application/json, */*;q=0.5" {
 		t.Fatalf("accept = %q", acc)
 	}
-	if res.Request.URL.Scheme != "https" || res.Request.URL.Host != "localhost:8080" {
+	if res.Request.URL.Scheme != "http" || res.Request.URL.Host != "localhost:8080" {
 		t.Fatalf("url = %v", res.Request.URL)
 	}
 }
@@ -97,7 +97,7 @@ func TestBuildRawBody(t *testing.T) {
 	if string(res.Body) != `{"a":1}` {
 		t.Fatalf("body = %s", res.Body)
 	}
-	if res.Request.URL.String() != "https://localhost:8080/" {
+	if res.Request.URL.String() != "http://localhost:8080/" {
 		t.Fatalf("url = %s", res.Request.URL)
 	}
 }

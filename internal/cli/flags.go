@@ -93,7 +93,7 @@ func registerSharedFlags(cmd *cobra.Command, f *sharedFlags) {
 	fl.StringArrayVar(&f.Proxy, "proxy", nil, `Proxy as protocol:URL (e.g. http:http://localhost:8080); repeatable, or use protocol "all" as a catch-all`)
 	fl.IntVar(&f.MaxHeaders, "max-headers", 0, "Accepted for httpie compatibility; not enforced (Go's HTTP client has no equivalent limit)")
 
-	fl.StringVar(&f.DefaultScheme, "default-scheme", "https", "Default URL scheme when none is given")
+	fl.StringVar(&f.DefaultScheme, "default-scheme", "", "Default URL scheme when none is given (default: http for localhost/127.0.0.1/::1, https otherwise)")
 
 	fl.StringVarP(&f.Auth, "auth", "a", "", "Credentials: user:pass, user, or a bearer token")
 	fl.StringVarP(&f.AuthType, "auth-type", "A", "basic", "Auth type: basic, digest, or bearer")

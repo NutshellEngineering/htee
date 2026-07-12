@@ -29,7 +29,7 @@ const (
 type Options struct {
 	Method        string
 	URL           string // not yet normalized
-	DefaultScheme string // default "https"
+	DefaultScheme string // if "", auto-selected per host by NormalizeURL (http for localhost, https otherwise)
 	Items         []itemsyntax.KeyValueArg
 
 	Form      bool
@@ -56,11 +56,7 @@ type Result struct {
 // ready-to-send *http.Request. Mirrors the request-building portions of
 // httpie's client.py/uploads.py/models.py.
 func Build(opts Options) (*Result, error) {
-	scheme := opts.DefaultScheme
-	if scheme == "" {
-		scheme = "https"
-	}
-	normalizedURL := NormalizeURL(opts.URL, scheme)
+	normalizedURL := NormalizeURL(opts.URL, opts.DefaultScheme)
 
 	isJSONMode := !opts.Form && !opts.Multipart
 	ri, err := itemsyntax.FromArgs(opts.Items, isJSONMode)
