@@ -1,10 +1,11 @@
 # htee
 
-A fast, first-class terminal HTTP client, written in Go. `htee` transliterates
-[httpie](https://httpie.io/)'s CLI grammar into a single static binary
-called `ht` — same item syntax, same flags, same output model — plus one
-addition: an `HT_AUTH` (or `AUTH_TOKEN`) environment variable for
-auto-injecting a bearer token without typing `-a` on every call.
+[![Static Badge](https://img.shields.io/badge/Nutshell_Engineering-Internal-green?logo=okta)](https://github.com/search?q=org%3ANutshellEngineering+topic%3Ainternal&type=repositories)
+[![Apache License 2.0](https://img.shields.io/:license-Apache%20License%202.0-blue.svg?style=shield)](https://github.com/NutshellEngineering/htee/blob/main/LICENSE.md)
+
+Flexible, familiar HTTP client that makes navigating APIs delightfully simple.
+
+![htee](./assets/htee-hero.webp)
 
 ## Install
 
@@ -32,16 +33,16 @@ ht example.org X-Custom:value id==42 # header + query string item
 
 ### Item syntax
 
-| Separator | Meaning                                    | Example              |
-|-----------|---------------------------------------------|-----------------------|
-| `=`       | JSON/form string field                      | `foo=bar`             |
-| `:=`      | JSON field with a raw (non-string) value    | `n:=1`, `ok:=true`    |
-| `==`      | Query string parameter                      | `page==2`             |
-| `:`       | Header                                      | `X-Custom:value`      |
-| `:` empty | Remove a default header                     | `Accept:`             |
-| `@`       | File upload (multipart)                     | `avatar@photo.png`    |
-| `=@`      | Field value loaded from file content        | `bio=@bio.txt`        |
-| `:=@`     | JSON field value loaded from file content   | `data:=@data.json`    |
+| Separator | Meaning                                   | Example            |
+|-----------|-------------------------------------------|--------------------|
+| `=`       | JSON/form string field                    | `foo=bar`          |
+| `:=`      | JSON field with a raw (non-string) value  | `n:=1`, `ok:=true` |
+| `==`      | Query string parameter                    | `page==2`          |
+| `:`       | Header                                    | `X-Custom:value`   |
+| `:` empty | Remove a default header                   | `Accept:`          |
+| `@`       | File upload (multipart)                   | `avatar@photo.png` |
+| `=@`      | Field value loaded from file content      | `bio=@bio.txt`     |
+| `:=@`     | JSON field value loaded from file content | `data:=@data.json` |
 
 Nested JSON via bracket paths is supported: `person[name]=bob`,
 `tags[]=a`, `tags[]=b`.
