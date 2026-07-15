@@ -4,10 +4,12 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,9 +18,11 @@ import (
 	"golang.org/x/term"
 
 	"app.getnutshell/htee/internal/auth"
+	"app.getnutshell/htee/internal/config"
 	"app.getnutshell/htee/internal/itemsyntax"
 	"app.getnutshell/htee/internal/message"
 	"app.getnutshell/htee/internal/netrc"
+	"app.getnutshell/htee/internal/openapi"
 	"app.getnutshell/htee/internal/output"
 	"app.getnutshell/htee/internal/request"
 	"app.getnutshell/htee/internal/transport"
@@ -37,16 +41,24 @@ type Config struct {
 func Execute(cfg Config) int {
 	cmd := NewRootCommand(cfg)
 	if err := cmd.Execute(); err != nil {
-		if ue, ok := err.(*usageError); ok {
-			fmt.Fprintf(os.Stderr,
-				"usage:\n    %s\n\nerror:\n    %s\n\nfor more information:\n    run '%s --help'\n",
-				ue.usage, ue.message, ue.progName)
+		var ue *usageError
+		if errors.As(err, &ue) {
+			mustPrintUsage(ue)
 		} else {
-			fmt.Fprintln(os.Stderr, progNameFor(cfg)+":", err)
+			// TODO remove this handling, we no longer ship vbs, clean up all at once
+			_, _ = fmt.Fprintln(os.Stderr, progNameFor(cfg)+":", err)
 		}
 		return 1
 	}
 	return 0
+}
+
+func mustPrintUsage(ue *usageError) {
+	_, err := fmt.Fprintf(os.Stderr,
+		"usage:\n    %s\n\nerror:\n    %s\n\nfor more information:\n    run '%s --help'\n",
+		ue.usage, ue.message, ue.progName)
+	panic(err)
+	return
 }
 
 // progNameFor returns the binary name used in usage text and error prefixes:
@@ -91,6 +103,7 @@ func NewRootCommand(cfg Config) *cobra.Command {
 		},
 	}
 	registerSharedFlags(cmd, &flags)
+	cmd.AddCommand(newInitCommand())
 	return cmd
 }
 
@@ -177,6 +190,15 @@ func run(cmd *cobra.Command, cfg Config, flags *sharedFlags, args []string) erro
 		return err
 	}
 
+	var doc *openapi.Doc
+	var docErr error
+	if !flags.Offline {
+		doc, docErr = loadProjectOpenAPIDoc()
+		if doc != nil {
+			output.RenderValidationEnabled(cmd.OutOrStdout(), outOpts.Pretty.Colors)
+		}
+	}
+
 	reqMsg := message.FromRequest(built.Request, built.Body, built.HeaderOrder)
 	output.RenderRequest(cmd.OutOrStdout(), reqMsg, printFlags, outOpts)
 
@@ -214,14 +236,54 @@ func run(cmd *cobra.Command, cfg Config, flags *sharedFlags, args []string) erro
 		printedRequest := printFlags.ReqHeaders || printFlags.ReqBody
 		printsResponse := printFlags.RespHeaders || printFlags.RespBody || printFlags.RespMeta
 		if printedRequest && printsResponse {
-			fmt.Fprint(cmd.OutOrStdout(), message.MessageSeparator)
+			_, err := fmt.Fprint(cmd.OutOrStdout(), message.MessageSeparator)
+			if err != nil {
+				panic(err)
+			}
 		}
 
 		respMsg := message.FromResponse(hop.Result.Response, hop.Result.Body, hop.Result.Elapsed.Seconds())
 		output.RenderResponse(cmd.OutOrStdout(), respMsg, printFlags, outOpts)
+
+		if doc != nil && printsResponse {
+			outcome := doc.Validate(hop.Request, hop.Body, hop.Result.Response, hop.Result.Body)
+			output.RenderValidation(cmd.OutOrStdout(), outcome, outOpts.Pretty.Colors)
+		}
+	}
+
+	// Reported once, after every request/response has printed, rather than
+	// up front - a broken spec shouldn't push output ahead of the response
+	// it's meant to annotate.
+	if docErr != nil {
+		output.RenderOpenAPILoadError(cmd.ErrOrStderr(), docErr, outOpts.Pretty.Colors)
 	}
 
 	return nil
+}
+
+// loadProjectOpenAPIDoc loads the OpenAPI spec referenced by the current
+// directory's .ht/conf.toml, if any. A missing/unset config is not an error
+// here - it just means no request/response validation happens. A spec that
+// fails to load is returned as an error for the caller to report, but never
+// blocks the request itself.
+func loadProjectOpenAPIDoc() (*openapi.Doc, error) {
+	dir, err := os.Getwd()
+	if err != nil || !config.Exists(dir) {
+		return nil, nil
+	}
+	cfg, err := config.Read(dir)
+	if err != nil || cfg.OpenAPISpec == "" {
+		return nil, nil
+	}
+	specPath := cfg.OpenAPISpec
+	if !filepath.IsAbs(specPath) {
+		specPath = filepath.Join(dir, specPath)
+	}
+	doc, err := openapi.LoadDoc(specPath)
+	if err != nil {
+		return nil, fmt.Errorf("could not load OpenAPI spec %s: %w", cfg.OpenAPISpec, err)
+	}
+	return doc, nil
 }
 
 // resolveHTTPTransport builds the *http.Transport carrying flags.Verify/
